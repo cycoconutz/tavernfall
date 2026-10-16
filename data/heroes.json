@@ -1,0 +1,5 @@
+[
+  {"id":"warrior","name":"Warrior","power":"Gain +1 attack to all goblins and dragons whenever you buy one.","description":"Aggro","artPrompt":"fantasy warrior hero, armored fighter with greatsword, red sash, tavernfall card portrait, digital illustration, upper body, vibrant colors"},
+  {"id":"ranger","name":"Ranger","power":"Every third unit you buy is free.","description":"Economy","artPrompt":"fantasy ranger hero, hooded archer with forest cloak, glowing bow, tavernfall card portrait, digital illustration, upper body, vibrant colors"},
+  {"id":"mage","name":"Mage","power":"Spellcraft: +1/+1 to a tribe of choice after each fight.","description":"Control","artPrompt":"fantasy mage hero, arcane scholar with staff and runes, glowing hands, tavernfall card portrait, digital illustration, upper body, vibrant colors"}
+]

@@ -1,0 +1,8 @@
+node_modules
+dist
+.DS_Store
+*.local
+public/assets/*.png
+!public/assets/.gitkeep
+test-results
+playwright-report

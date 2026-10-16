@@ -1,0 +1,12 @@
+[
+  {"id":"poisoned_barbs","name":"Poisoned Barbs","effect":"goblins gain poison"},
+  {"id":"dragon_heart","name":"Dragon Heart","effect":"+2 attack to all dragons"},
+  {"id":"tide_surge","name":"Tide Surge","effect":"naga gain divineShield on spawn"},
+  {"id":"murloc_call","name":"Murloc Call","effect":"murlocs get reborn"},
+  {"id":"triple_crown","name":"Triple Crown","effect":"triples discover a star tier higher"},
+  {"id":"golden_anvil","name":"Golden Anvil","effect":"upgrades cost 1 less"},
+  {"id":"war_drum","name":"War Drum","effect":"+1 attack to all units each fight"},
+  {"id":"crystal_lens","name":"Crystal Lens","effect":"shop shows 5 units instead of 4"},
+  {"id":"phoenix_ash","name":"Phoenix Ash","effect":"first unit death each fight resurrects with 1 health"},
+  {"id":"void_relic","name":"Void Relic","effect":"poison triggers on divine shield break"}
+]
