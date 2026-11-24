@@ -44,7 +44,7 @@ export default function App() {
           {heroList().map((h) => (
             <div key={h.id} className="card">
               <img
-                src={`/assets/hero_${h.id}.png`}
+                src={`${import.meta.env.BASE_URL}assets/hero_${h.id}.png`}
                 alt={h.id}
                 style={{ width: 96, height: 96, borderRadius: 8 }}
                 onError={(e) => (e.currentTarget.style.display = "none")}
@@ -113,7 +113,7 @@ export default function App() {
             <div className="row">
               {enc.enemy.map((u, i) => (
                 <div key={i} className="unit">
-                  <img src={`/assets/${u.templateId}.png`} alt={u.templateId} onError={(e) => (e.currentTarget.style.display = "none")} />
+                  <img src={`${import.meta.env.BASE_URL}assets/${u.templateId}.png`} alt={u.templateId} onError={(e) => (e.currentTarget.style.display = "none")} />
                   <div>{u.templateId}</div>
                   <div className="muted">{u.attack}/{u.health}</div>
                 </div>
@@ -129,7 +129,7 @@ export default function App() {
         <div className="row">
           {state.board.map((u, i) => (
             <div key={u.instanceId} className="unit">
-              <img src={`/assets/${u.templateId}.png`} alt={u.templateId} onError={(e) => (e.currentTarget.style.display = "none")} />
+              <img src={`${import.meta.env.BASE_URL}assets/${u.templateId}.png`} alt={u.templateId} onError={(e) => (e.currentTarget.style.display = "none")} />
               <div>{u.templateId}</div>
               <div className="muted">
                 {u.attack}/{u.health}
@@ -162,7 +162,7 @@ export default function App() {
             <div className="row" style={{ marginTop: 8 }}>
               {state.shop.map((u, i) => (
                 <div key={u.instanceId} className="unit">
-                  <img src={`/assets/${u.templateId}.png`} alt={u.templateId} onError={(e) => (e.currentTarget.style.display = "none")} />
+                  <img src={`${import.meta.env.BASE_URL}assets/${u.templateId}.png`} alt={u.templateId} onError={(e) => (e.currentTarget.style.display = "none")} />
                   <div>{u.templateId}</div>
                   <div className="muted">{u.attack}/{u.health}</div>
                   <button onClick={() => dispatch({ type: "BUY", index: i })}>Buy (3)</button>
