@@ -2,6 +2,8 @@
 
 A single-player roguelite auto battler for the browser. Hearthstone Battlegrounds style tavern economy, wrapped in a short linear dungeon run.
 
+Live: **https://cycoconutz.github.io/tavernfall/**
+
 ## Stack
 
 - TypeScript, Vite, React
