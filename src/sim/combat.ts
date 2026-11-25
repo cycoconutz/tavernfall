@@ -1,5 +1,14 @@
 import { Rng } from "./rng";
-import { UnitState, CombatInput, CombatResult, Keyword, DeathrattleEffect } from "./types";
+import {
+  UnitState,
+  CombatInput,
+  CombatResult,
+  CombatEvent,
+  CombatFlags,
+  Keyword,
+  DeathrattleEffect,
+  Side
+} from "./types";
 
 export function cloneUnit(u: UnitState): UnitState {
   return { ...u, keywords: [...u.keywords] };
@@ -29,8 +38,9 @@ function findTarget(enemy: UnitState[], rng: Rng): UnitState {
   return rng.pick(pool);
 }
 
-function spawnToken(owner: UnitState[]): void {
-  if (owner.length >= 7) return;
+/** Spawns a token for the owning side; returns its slot, or -1 if the board is full. */
+function spawnToken(owner: UnitState[]): number {
+  if (owner.length >= 7) return -1;
   owner.push({
     instanceId: `t${owner.length}`,
     templateId: "murloc_tadpole",
@@ -39,41 +49,78 @@ function spawnToken(owner: UnitState[]): void {
     keywords: [],
     golden: false
   });
+  return owner.length - 1;
+}
+
+// Structured log helper: every event gets a sequence number equal to its
+// index in the log (first event is seq 0).
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+type EventDraft = DistributiveOmit<CombatEvent, "seq">;
+
+function emitLog(log: CombatEvent[], event: EventDraft): void {
+  log.push({ ...event, seq: log.length } as CombatEvent);
+}
+
+function otherSide(side: Side): Side {
+  return side === "player" ? "enemy" : "player";
 }
 
 function processDeath(
   dead: UnitState,
   ownerBoard: UnitState[],
   enemyBoard: UnitState[],
-  events: string[]
+  ownerSideName: Side,
+  events: string[],
+  log: CombatEvent[]
 ): void {
   const effect: DeathrattleEffect | undefined = dead.deathrattle;
+  const sourceSlot = ownerBoard.indexOf(dead);
   switch (effect) {
     case "buff_ally": {
-      const idx = ownerBoard.indexOf(dead);
-      for (const i of [idx - 1, idx + 1]) {
+      const affectedSlots: number[] = [];
+      for (const i of [sourceSlot - 1, sourceSlot + 1]) {
         if (i < 0 || i >= ownerBoard.length) continue;
         if (ownerBoard[i].health <= 0) continue;
         ownerBoard[i].attack += 1;
         ownerBoard[i].health += 1;
+        affectedSlots.push(i);
       }
       events.push(`${dead.templateId} buffs adjacent allies`);
+      emitLog(log, { kind: "deathrattle", effect: "buff_ally", side: ownerSideName, sourceSlot, affectedSlots });
       break;
     }
     case "damage_adjacent": {
-      const base = Math.max(0, Math.min(enemyBoard.length - 1, ownerBoard.indexOf(dead)));
+      const base = Math.max(0, Math.min(enemyBoard.length - 1, sourceSlot));
+      const affectedSlots: number[] = [];
       for (const i of [base - 1, base, base + 1]) {
         if (i < 0 || i >= enemyBoard.length) continue;
         if (enemyBoard[i].health <= 0) continue;
         enemyBoard[i].health -= 1;
-        if (enemyBoard[i].health <= 0) events.push(`${enemyBoard[i].templateId} dies from splash`);
+        affectedSlots.push(i);
+        if (enemyBoard[i].health <= 0) {
+          events.push(`${enemyBoard[i].templateId} dies from splash`);
+          emitLog(log, {
+            kind: "death",
+            side: otherSide(ownerSideName),
+            slot: i,
+            templateId: enemyBoard[i].templateId
+          });
+        }
       }
       events.push(`${dead.templateId} splashes adjacent enemies`);
+      emitLog(log, { kind: "deathrattle", effect: "damage_adjacent", side: ownerSideName, sourceSlot, affectedSlots });
       break;
     }
     case "summon": {
-      spawnToken(ownerBoard);
+      const summonSlot = spawnToken(ownerBoard);
       events.push(`${dead.templateId} summons a token`);
+      emitLog(log, {
+        kind: "deathrattle",
+        effect: "summon",
+        side: ownerSideName,
+        sourceSlot,
+        affectedSlots: summonSlot >= 0 ? [summonSlot] : []
+      });
       break;
     }
     default:
@@ -86,30 +133,58 @@ type Resurrections = { player: boolean; enemy: boolean };
 function executeStrike(
   attacker: UnitState,
   defender: UnitState,
-  attackerSide: UnitState[],
-  defenderSide: UnitState[],
-  defenderSideName: "player" | "enemy",
-  relics: string[],
+  attackerBoard: UnitState[],
+  defenderBoard: UnitState[],
+  defenderSideName: Side,
+  flags: CombatFlags,
   resurrections: Resurrections,
-  events: string[]
+  events: string[],
+  log: CombatEvent[]
 ): void {
+  const attackerSideName = otherSide(defenderSideName);
   const isPoison = hasKeyword(attacker, "poison");
-  const voidRelic = relics.includes("void_relic");
-  const phoenix = relics.includes("phoenix_ash");
   const hadDivine = hasKeyword(defender, "divineShield");
+  const attackerSlot = attackerBoard.indexOf(attacker);
+  const defenderSlot = defenderBoard.indexOf(defender);
+
+  emitLog(log, {
+    kind: "attack",
+    attackerSide: attackerSideName,
+    attackerSlot,
+    defenderSide: defenderSideName,
+    defenderSlot,
+    damage: hadDivine || isPoison ? 0 : attacker.attack
+  });
 
   if (hadDivine) {
     removeKeyword(defender, "divineShield");
     events.push(`${attacker.templateId} breaks divine shield on ${defender.templateId}`);
-    if (isPoison && voidRelic) {
+    emitLog(log, { kind: "shieldBreak", defenderSide: defenderSideName, defenderSlot });
+    if (isPoison && flags.poisonOnShieldBreak) {
       defender.health = 0;
       events.push(`${attacker.templateId} poisons ${defender.templateId} through the shield`);
+      emitLog(log, {
+        kind: "poison",
+        attackerSide: attackerSideName,
+        attackerSlot,
+        defenderSide: defenderSideName,
+        defenderSlot,
+        throughShield: true
+      });
     }
   } else {
     if (attacker.attack > 0) {
       if (isPoison) {
         defender.health = 0;
         events.push(`${attacker.templateId} poisons ${defender.templateId}`);
+        emitLog(log, {
+          kind: "poison",
+          attackerSide: attackerSideName,
+          attackerSlot,
+          defenderSide: defenderSideName,
+          defenderSlot,
+          throughShield: false
+        });
       } else {
         defender.health -= attacker.attack;
         events.push(`${attacker.templateId} hits ${defender.templateId} for ${attacker.attack}`);
@@ -121,34 +196,41 @@ function executeStrike(
     removeKeyword(defender, "reborn");
     defender.health = 1;
     events.push(`${defender.templateId} reborns`);
+    emitLog(log, { kind: "reborn", side: defenderSideName, slot: defenderSlot, templateId: defender.templateId });
     return;
   }
 
   if (defender.health > 0) return;
 
-  if (phoenix && !resurrections[defenderSideName]) {
+  if (flags.resurrectFirstDeath && !resurrections[defenderSideName]) {
     resurrections[defenderSideName] = true;
     defender.health = 1;
     removeKeyword(defender, "reborn");
     events.push(`${defender.templateId} is resurrected with 1 health`);
+    emitLog(log, { kind: "resurrect", side: defenderSideName, slot: defenderSlot, templateId: defender.templateId });
     return;
   }
 
-  processDeath(defender, defenderSide, attackerSide, events);
-  const index = defenderSide.indexOf(defender);
-  if (index >= 0) defenderSide.splice(index, 1);
+  emitLog(log, { kind: "death", side: defenderSideName, slot: defenderSlot, templateId: defender.templateId });
+  processDeath(defender, defenderBoard, attackerBoard, defenderSideName, events, log);
+  const index = defenderBoard.indexOf(defender);
+  if (index >= 0) defenderBoard.splice(index, 1);
 }
 
 export function combat(input: CombatInput): CombatResult {
   const player = cloneBoard(input.player);
   const enemy = cloneBoard(input.enemy);
-  const relics = input.relics ?? [];
+  const flags: CombatFlags = {
+    resurrectFirstDeath: input.resurrectFirstDeath ?? false,
+    poisonOnShieldBreak: input.poisonOnShieldBreak ?? false
+  };
   const rng = new Rng(input.seed);
   const events: string[] = [];
+  const log: CombatEvent[] = [];
   const attacked = new Set<string>();
   const resurrections: Resurrections = { player: false, enemy: false };
-  let activeSide: "player" | "enemy" = (player.length >= enemy.length) ? "player" : "enemy";
-  const initialSide: "player" | "enemy" = activeSide;
+  let activeSide: Side = (player.length >= enemy.length) ? "player" : "enemy";
+  const initialSide: Side = activeSide;
   let rounds = 0;
 
   for (let step = 0; step < 100000; step++) {
@@ -157,7 +239,7 @@ export function combat(input: CombatInput): CombatResult {
     const playerSide = activeSide === "player";
     const attackerBoard = playerSide ? player : enemy;
     const defenderBoard = playerSide ? enemy : player;
-    const defenderName: "player" | "enemy" = playerSide ? "enemy" : "player";
+    const defenderName: Side = playerSide ? "enemy" : "player";
 
     let unattacked = alive(attackerBoard).filter((u) => !attacked.has(u.instanceId));
     if (unattacked.length === 0) {
@@ -174,7 +256,7 @@ export function combat(input: CombatInput): CombatResult {
 
     const attacker = rng.pick(unattacked);
     const target = findTarget(defenderBoard, rng);
-    executeStrike(attacker, target, attackerBoard, defenderBoard, defenderName, relics, resurrections, events);
+    executeStrike(attacker, target, attackerBoard, defenderBoard, defenderName, flags, resurrections, events, log);
     attacked.add(attacker.instanceId);
     rounds++;
     activeSide = playerSide ? "enemy" : "player";
@@ -194,6 +276,7 @@ export function combat(input: CombatInput): CombatResult {
     playerSurvivors: pAlive,
     enemySurvivors: eAlive,
     rounds,
-    events
+    events,
+    log
   };
 }

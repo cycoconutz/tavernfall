@@ -4,7 +4,7 @@ import type { GameState, Encounter } from "./state";
 import { pushLog } from "./state";
 import { generateShop } from "./shop";
 import { combat, cloneBoard } from "../sim/combat";
-import { boardForCombat, applyMagePostWin } from "./modifiers";
+import { boardForCombat, applyMagePostWin, combatFlagsForRelics } from "./modifiers";
 import relicsJson from "../../data/relics.json";
 
 function enemyCountMaxTier(kind: Encounter["kind"], tier: number): { count: number; maxTier: number } {
@@ -64,6 +64,7 @@ export function startRun(heroId: string, seed: number): GameState {
     pendingRelics: null,
     log: [],
     lastFight: [],
+    lastFightLog: [],
     stats: { wins: 0, losses: 0 },
     status: "playing"
   };
@@ -93,10 +94,11 @@ export function resolveCurrentFight(state: GameState): { won: boolean; damageTak
   if (!enc || enc.kind === "rest") return { won: true, damageTaken: 0, survivors: 0 };
   const rng = new Rng(state.seed + state.encounterIndex * 101);
   const playerBoard = boardForCombat(state);
-  const result = combat({ player: playerBoard, enemy: cloneBoard(enc.enemy), seed: Math.floor(rng.next() * 1e9), relics: state.relicIds });
+  const result = combat({ player: playerBoard, enemy: cloneBoard(enc.enemy), seed: Math.floor(rng.next() * 1e9), ...combatFlagsForRelics(state.relicIds) });
   const won = result.winner === "player" || result.winner === "draw";
   pushLog(state, `${enc.label}: ${won ? "win" : "loss"} in ${result.rounds} attacks`);
   state.lastFight = result.events.slice(-70);
+  state.lastFightLog = result.log;
 
   if (won) {
     state.stats.wins++;

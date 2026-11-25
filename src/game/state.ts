@@ -1,4 +1,5 @@
 import type { UnitState } from "../sim/types";
+import type { CombatEvent } from "../sim/types";
 
 export interface Encounter {
   id: string;
@@ -27,6 +28,7 @@ export interface GameState {
   log: string[];
   bossBeaten: boolean;
   lastFight: string[];
+  lastFightLog: CombatEvent[];
   stats: { wins: number; losses: number };
   status: "playing" | "won" | "lost";
 }

@@ -1,6 +1,6 @@
 import { cloneBoard } from "../sim/combat";
 import type { GameState } from "./state";
-import type { UnitState, Keyword } from "../sim/types";
+import type { UnitState, Keyword, CombatFlags } from "../sim/types";
 import { findTemplate } from "./units";
 
 // Applies hero and relic static modifiers to a copy of the board for combat.
@@ -24,6 +24,22 @@ export function boardForCombat(state: GameState): UnitState[] {
 
 function addKeyword(u: UnitState, k: Keyword): void {
   if (!u.keywords.includes(k)) u.keywords = [...u.keywords, k];
+}
+
+/**
+ * Maps combat-layer relic ids onto the generic engine capability flags of
+ * CombatInput, so the raw sim (src/sim) never learns about specific relic
+ * ids. Callers building a CombatInput spread these flags into it:
+ *
+ *   combat({ player, enemy, seed, ...combatFlagsForRelics(state.relicIds) })
+ */
+export function combatFlagsForRelics(relicIds: string[]): CombatFlags {
+  return {
+    // Phoenix Ash: first unit death each fight resurrects with 1 health.
+    resurrectFirstDeath: relicIds.includes("phoenix_ash"),
+    // Void Relic: poison triggers on divine shield break.
+    poisonOnShieldBreak: relicIds.includes("void_relic")
+  };
 }
 
 // Mage hero: after a win, buff the most common tribe on the board.
