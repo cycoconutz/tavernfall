@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { reduce } from "./game/reducer";
 import type { GameState } from "./game/state";
 import type { Action } from "./game/actions";
@@ -6,6 +7,9 @@ import { currentEncounter } from "./game/run";
 import { saveRun, loadRun, clearRun, encodeSeed, decodeSeed } from "./game/persist";
 import { relicLabel } from "./game/relics";
 import { heroPower, heroList } from "./game/heroes";
+import { FxCanvas } from "./fx/FxCanvas";
+import type { FxCanvasHandle } from "./fx/FxCanvas";
+import { isMuted, sfx, toggleMute, warmUp } from "./game/audio";
 
 
 function init(): GameState | null {
@@ -20,6 +24,63 @@ export default function App() {
   const [state, dispatch] = useReducer(reducer, null, init);
   const [seedCode, setSeedCode] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [popUnit, setPopUnit] = useState<string | null>(null);
+  const [soundOn, setSoundOn] = useState(!isMuted());
+  const appRef = useRef<HTMLDivElement>(null);
+  const fxRef = useRef<FxCanvasHandle>(null);
+
+  useEffect(() => {
+    const warm = () => {
+      warmUp();
+      window.removeEventListener("pointerdown", warm);
+    };
+    window.addEventListener("pointerdown", warm);
+    return () => window.removeEventListener("pointerdown", warm);
+  }, []);
+
+  /** Center of a DOM element in canvas-overlay coordinates. */
+  function fxCenter(el: Element | null): { x: number; y: number } {
+    const app = appRef.current;
+    if (!el || !app) return { x: 0, y: 0 };
+    const r = el.getBoundingClientRect();
+    const a = app.getBoundingClientRect();
+    return { x: r.left - a.left + r.width / 2, y: r.top - a.top + r.height / 2 };
+  }
+
+  function buyUnit(index: number, e: ReactMouseEvent) {
+    if (!state) return;
+    const unit = state.shop[index];
+    const pos = fxCenter((e.currentTarget as HTMLElement).closest(".unit"));
+    dispatch({ type: "BUY", index });
+    sfx.buy();
+    fxRef.current?.burst("puff", pos.x, pos.y, { count: 8, ttl: 0.5 });
+    if (unit) {
+      setPopUnit(unit.instanceId);
+      window.setTimeout(
+        () => setPopUnit((cur) => (cur === unit.instanceId ? null : cur)),
+        600
+      );
+    }
+  }
+
+  function sellUnit(index: number, e: ReactMouseEvent) {
+    if (!state) return;
+    const pos = fxCenter((e.currentTarget as HTMLElement).closest(".unit"));
+    dispatch({ type: "SELL", index });
+    sfx.sell();
+    sfx.coin();
+    fxRef.current?.burst("coin", pos.x, pos.y, { count: 12, ttl: 0.8 });
+    fxRef.current?.burst("spark", pos.x, pos.y, { count: 6, ttl: 0.4 });
+  }
+
+  function toggleSound() {
+    const nowMuted = toggleMute();
+    setSoundOn(!nowMuted);
+    if (!nowMuted) {
+      warmUp();
+      sfx.tick();
+    }
+  }
 
   useEffect(() => {
     if (state) saveRun(state);
@@ -76,7 +137,7 @@ export default function App() {
   const enc = currentEncounter(state);
 
   return (
-    <div className="app">
+    <div className="app" ref={appRef}>
       <h1>Tavernfall</h1>
       <div className="row">
         <span className="stat">HP {state.health}/{state.maxHealth}</span>
@@ -85,6 +146,7 @@ export default function App() {
         <span className="stat">W{state.stats.wins}/L{state.stats.losses}</span>
         <span className="muted">seed {encodeSeed(state.seed)}</span>
         <button onClick={restart}>New run</button>
+        <button onClick={toggleSound}>{soundOn ? "Sound: on" : "Sound: off"}</button>
       </div>
 
       {state.pendingRelics && (
@@ -133,7 +195,7 @@ export default function App() {
               key={u.instanceId}
               className={`unit${dragIndex === i ? " dragging" : ""}${
                 dragIndex !== null && dragIndex !== i ? " drop-target" : ""
-              }`}
+              }${popUnit === u.instanceId ? " anim-pop" : ""}`}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.effectAllowed = "move";
@@ -160,7 +222,7 @@ export default function App() {
               <div className="row">
                 <button onClick={() => dispatch({ type: "MOVE_BOARD", from: i, to: Math.max(0, i - 1) })} disabled={i === 0}>Up</button>
                 <button onClick={() => dispatch({ type: "MOVE_BOARD", from: i, to: Math.min(state.board.length - 1, i + 1) })} disabled={i === state.board.length - 1}>Down</button>
-                <button onClick={() => dispatch({ type: "SELL", index: i })}>Sell</button>
+                <button onClick={(e) => sellUnit(i, e)}>Sell</button>
               </div>
             </div>
           ))}
@@ -187,7 +249,7 @@ export default function App() {
                   <img src={`${import.meta.env.BASE_URL}assets/${u.templateId}.png`} alt={u.templateId} onError={(e) => (e.currentTarget.style.display = "none")} />
                   <div>{u.templateId}</div>
                   <div className="muted">{u.attack}/{u.health}</div>
-                  <button onClick={() => dispatch({ type: "BUY", index: i })}>Buy (3)</button>
+                  <button onClick={(e) => buyUnit(i, e)}>Buy (3)</button>
                 </div>
               ))}
               {state.shop.length === 0 && <span className="muted">shop empty, reroll or advance</span>}
@@ -221,6 +283,8 @@ export default function App() {
           </p>
         </div>
       )}
+
+      <FxCanvas ref={fxRef} />
     </div>
   );
 }

@@ -31,3 +31,23 @@ test("drag and drop reorders the board", async ({ page }) => {
   await first.dragTo(board.nth(1));
   await expect(board.first().locator("div").nth(0)).not.toHaveText(before ?? "");
 });
+
+test("buy and sell juice: overlay canvas mounted, board empties again", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start run" }).first().click();
+  await page.getByRole("button", { name: /Buy/ }).first().click();
+  await expect(page.getByText("Your board (1/7)")).toBeVisible();
+  await expect(page.locator("canvas").first()).toBeVisible();
+  await page.getByRole("button", { name: "Sell" }).first().click();
+  await expect(page.getByText("Your board (0/7)")).toBeVisible();
+});
+
+test("sound toggle flips and persists across reload", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start run" }).first().click();
+  const btn = page.getByRole("button", { name: /Sound: on/ });
+  await btn.click();
+  await expect(page.getByRole("button", { name: /Sound: off/ })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: /Sound: off/ })).toBeVisible();
+});
