@@ -47,7 +47,7 @@ describe("combat", () => {
     expect(r.enemySurvivors.length).toBe(0);
   });
 
-  it("structured log: fixed seed reproduces the pre-change fight with an exact log prefix", () => {
+  it("structured log: positional combat on the fixed scenario with an exact log prefix", () => {
     const p = [
       unit("p0", "dragon_whelp", 3, 2),
       unit("p1", "shielded_squire", 2, 4, ["divineShield"]),
@@ -60,46 +60,94 @@ describe("combat", () => {
     ];
     const r = combat({ player: p, enemy: e, seed: 6 });
 
-    // Winner, rounds and narrative log recorded from this exact seed before
-    // the structured log existed: behavior is byte-identical.
+    // Recorded from the positional engine: leftmost attacks leftmost, taunts
+    // override, rotation alternates by slot, damage accumulates.
     expect(r.winner).toBe("enemy");
-    expect(r.rounds).toBe(10);
+    expect(r.rounds).toBe(12);
     expect(r.events).toEqual([
+      "dragon_whelp hits brute for 3",
+      "brute hits dragon_whelp for 4",
       "shielded_squire hits brute for 2",
-      "toad hits dragon_whelp for 2",
+      "toad breaks divine shield on shielded_squire",
       "summon_brood hits brute for 1",
-      "brute hits summon_brood for 4",
-      "phoenix_hatch breaks divine shield on shielded_squire",
-      "summon_brood hits brute for 1",
-      "brute hits shielded_squire for 4",
-      "toad hits summon_brood for 2",
+      "brute buffs adjacent allies",
+      "phoenix_hatch hits shielded_squire for 2",
+      "shielded_squire hits toad for 2",
+      "toad hits shielded_squire for 3",
+      "summon_brood hits toad for 1",
+      "phoenix_hatch hits summon_brood for 2",
+      "toad hits summon_brood for 3",
       "summon_brood summons a token",
-      "murloc_tadpole hits brute for 1",
-      "phoenix_hatch hits murloc_tadpole for 2"
+      "toad hits murloc_tadpole for 3"
     ]);
 
     // Exact structured log prefix: kinds, slots, damage and seq.
     expect(r.log.slice(0, 6)).toEqual([
-      { kind: "attack", seq: 0, attackerSide: "player", attackerSlot: 1, defenderSide: "enemy", defenderSlot: 0, damage: 2 },
-      { kind: "attack", seq: 1, attackerSide: "enemy", attackerSlot: 1, defenderSide: "player", defenderSlot: 0, damage: 2 },
+      { kind: "attack", seq: 0, attackerSide: "player", attackerSlot: 0, defenderSide: "enemy", defenderSlot: 0, damage: 3 },
+      { kind: "attack", seq: 1, attackerSide: "enemy", attackerSlot: 0, defenderSide: "player", defenderSlot: 0, damage: 4 },
       { kind: "death", seq: 2, side: "player", slot: 0, templateId: "dragon_whelp" },
-      // summon_brood moved to slot 1 after dragon_whelp was spliced.
-      { kind: "attack", seq: 3, attackerSide: "player", attackerSlot: 1, defenderSide: "enemy", defenderSlot: 0, damage: 1 },
-      { kind: "attack", seq: 4, attackerSide: "enemy", attackerSlot: 0, defenderSide: "player", defenderSlot: 1, damage: 4 },
-      { kind: "attack", seq: 5, attackerSide: "enemy", attackerSlot: 2, defenderSide: "player", defenderSlot: 0, damage: 0 }
+      // shielded_squire moved to slot 0 after dragon_whelp was spliced.
+      { kind: "attack", seq: 3, attackerSide: "player", attackerSlot: 0, defenderSide: "enemy", defenderSlot: 0, damage: 2 },
+      { kind: "attack", seq: 4, attackerSide: "enemy", attackerSlot: 1, defenderSide: "player", defenderSlot: 0, damage: 0 },
+      { kind: "shieldBreak", seq: 5, defenderSide: "player", defenderSlot: 0 }
     ]);
 
-    // Later events of the same fight: shield break, deaths, summon deathrattle.
-    expect(r.log[6]).toEqual({ kind: "shieldBreak", seq: 6, defenderSide: "player", defenderSlot: 0 });
-    expect(r.log.filter((ev) => ev.kind === "death")).toHaveLength(4);
+    // Later events of the same fight: deaths and both deathrattles.
+    expect(r.log.filter((ev) => ev.kind === "death")).toHaveLength(5);
     expect(r.log.filter((ev) => ev.kind === "deathrattle")).toEqual([
-      { kind: "deathrattle", seq: 12, effect: "summon", side: "player", sourceSlot: 0, affectedSlots: [1] }
+      { kind: "deathrattle", seq: 8, effect: "buff_ally", side: "enemy", sourceSlot: 0, affectedSlots: [1] },
+      { kind: "deathrattle", seq: 17, effect: "summon", side: "player", sourceSlot: 0, affectedSlots: [1] }
     ]);
 
     // Invariants: seq is dense and ordered, and every strike emits exactly
     // one attack event.
     r.log.forEach((ev, i) => expect(ev.seq).toBe(i));
     expect(r.log.filter((ev) => ev.kind === "attack")).toHaveLength(r.rounds);
+  });
+
+  it("leftmost attacks leftmost, player slot 0 first, alternating sides", () => {
+    const p = [unit("p0", "a", 2, 5), unit("p1", "b", 1, 5)];
+    const e = [unit("e0", "c", 2, 5), unit("e1", "d", 1, 5)];
+    const r = combat({ player: p, enemy: e, seed: 1 });
+    expect(r.log[0]).toMatchObject({
+      kind: "attack",
+      attackerSide: "player",
+      attackerSlot: 0,
+      defenderSlot: 0
+    });
+    expect(r.log[1]).toMatchObject({
+      kind: "attack",
+      attackerSide: "enemy",
+      attackerSlot: 0,
+      defenderSide: "player",
+      defenderSlot: 0
+    });
+  });
+
+  it("damage accumulates across strikes: no healing between attacks", () => {
+    const p = [unit("p0", "stabber", 2, 5), unit("p1", "stabber2", 2, 5), unit("p2", "stabber3", 2, 5)];
+    const e = [unit("e0", "tank", 0, 5)];
+    const r = combat({ player: p, enemy: e, seed: 2 });
+    // Three strikes of 2 land on the 5hp tank before it falls.
+    const hits = r.log.filter((ev) => ev.kind === "attack" && ev.defenderSide === "enemy");
+    expect(hits.map((ev) => (ev as { damage: number }).damage)).toEqual([2, 2, 2]);
+    expect(r.winner).toBe("player");
+    expect(r.enemySurvivors).toHaveLength(0);
+    expect(r.playerSurvivors).toHaveLength(3);
+  });
+
+  it("taunts override positional targeting until they fall", () => {
+    const p = [unit("p0", "striker", 5, 5)];
+    const e = [unit("e0", "soft", 1, 5), unit("e1", "guard", 1, 10, ["taunt"])];
+    const r = combat({ player: p, enemy: e, seed: 3 });
+    // Every attack lands on the taunt in slot 1 until it dies.
+    const attacks = r.log.filter((ev) => ev.kind === "attack" && ev.attackerSide === "player");
+    expect(attacks.length).toBeGreaterThanOrEqual(2);
+    for (const ev of attacks) {
+      if (r.log.slice(0, ev.seq).some((x) => x.kind === "death" && x.side === "enemy")) break;
+      expect((ev as { defenderSlot: number }).defenderSlot).toBe(1);
+    }
+    expect(r.winner).toBe("player");
   });
 
   it("resurrectFirstDeath flag: first death on each side returns with 1 health", () => {

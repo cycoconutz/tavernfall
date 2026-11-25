@@ -1,4 +1,3 @@
-import { Rng } from "./rng";
 import {
   UnitState,
   CombatInput,
@@ -30,12 +29,14 @@ function alive(units: UnitState[]): UnitState[] {
   return units.filter((u) => u.health > 0);
 }
 
-function findTarget(enemy: UnitState[], rng: Rng): UnitState {
+function findTarget(enemy: UnitState[]): UnitState {
+  // Flumble-style positional targeting: the frontmost alive unit defends,
+  // unless a taunt unit stands somewhere on the board.
   const poolAlive = alive(enemy);
   const taunts = poolAlive.filter((u) => hasKeyword(u, "taunt"));
   const pool = taunts.length ? taunts : poolAlive;
   if (pool.length === 0) throw new Error("no target");
-  return rng.pick(pool);
+  return pool[0];
 }
 
 /** Spawns a token for the owning side; returns its slot, or -1 if the board is full. */
@@ -71,7 +72,8 @@ function processDeath(
   enemyBoard: UnitState[],
   ownerSideName: Side,
   events: string[],
-  log: CombatEvent[]
+  log: CombatEvent[],
+  rotation: Rotation
 ): void {
   const effect: DeathrattleEffect | undefined = dead.deathrattle;
   const sourceSlot = ownerBoard.indexOf(dead);
@@ -121,6 +123,10 @@ function processDeath(
         sourceSlot,
         affectedSlots: summonSlot >= 0 ? [summonSlot] : []
       });
+      if (summonSlot >= 0) {
+        // Summoned tokens join the rotation and attack in later cycles.
+        rotation.push({ side: ownerSideName, unit: ownerBoard[summonSlot] });
+      }
       break;
     }
     default:
@@ -129,6 +135,11 @@ function processDeath(
 }
 
 type Resurrections = { player: boolean; enemy: boolean };
+
+// Fixed attack rotation: one entry per starting unit, alternating sides by
+// slot (player 0, enemy 0, player 1, enemy 1, ...). Dead entries are skipped
+// and the pointer wraps; summoned tokens are appended during the fight.
+type Rotation = Array<{ side: Side; unit: UnitState }>;
 
 function executeStrike(
   attacker: UnitState,
@@ -139,7 +150,8 @@ function executeStrike(
   flags: CombatFlags,
   resurrections: Resurrections,
   events: string[],
-  log: CombatEvent[]
+  log: CombatEvent[],
+  rotation: Rotation
 ): void {
   const attackerSideName = otherSide(defenderSideName);
   const isPoison = hasKeyword(attacker, "poison");
@@ -212,7 +224,7 @@ function executeStrike(
   }
 
   emitLog(log, { kind: "death", side: defenderSideName, slot: defenderSlot, templateId: defender.templateId });
-  processDeath(defender, defenderBoard, attackerBoard, defenderSideName, events, log);
+  processDeath(defender, defenderBoard, attackerBoard, defenderSideName, events, log, rotation);
   const index = defenderBoard.indexOf(defender);
   if (index >= 0) defenderBoard.splice(index, 1);
 }
@@ -224,42 +236,47 @@ export function combat(input: CombatInput): CombatResult {
     resurrectFirstDeath: input.resurrectFirstDeath ?? false,
     poisonOnShieldBreak: input.poisonOnShieldBreak ?? false
   };
-  const rng = new Rng(input.seed);
   const events: string[] = [];
   const log: CombatEvent[] = [];
-  const attacked = new Set<string>();
   const resurrections: Resurrections = { player: false, enemy: false };
-  let activeSide: Side = (player.length >= enemy.length) ? "player" : "enemy";
-  const initialSide: Side = activeSide;
+
+  // Fluffle-style rotation: fixed at battle start, alternating sides by slot.
+  // Targeting is positional (leftmost alive, taunts override) so the engine
+  // needs no randomness at all: same boards, same outcome, seed unused.
+  const rotation: Rotation = [];
+  const maxn = Math.max(player.length, enemy.length);
+  for (let i = 0; i < maxn; i++) {
+    if (i < player.length) rotation.push({ side: "player", unit: player[i] });
+    if (i < enemy.length) rotation.push({ side: "enemy", unit: enemy[i] });
+  }
+
+  let ptr = 0;
   let rounds = 0;
 
   for (let step = 0; step < 100000; step++) {
     if (alive(player).length === 0 || alive(enemy).length === 0) break;
+    if (rotation.length === 0) break;
 
-    const playerSide = activeSide === "player";
+    // Next living attacker in the fixed rotation, wrapping between cycles.
+    let entry: { side: Side; unit: UnitState } | null = null;
+    for (let k = 0; k < rotation.length; k++) {
+      const cand = rotation[ptr % rotation.length];
+      ptr++;
+      if (cand.unit.health > 0) {
+        entry = cand;
+        break;
+      }
+    }
+    if (!entry) break;
+
+    const playerSide = entry.side === "player";
     const attackerBoard = playerSide ? player : enemy;
     const defenderBoard = playerSide ? enemy : player;
     const defenderName: Side = playerSide ? "enemy" : "player";
 
-    let unattacked = alive(attackerBoard).filter((u) => !attacked.has(u.instanceId));
-    if (unattacked.length === 0) {
-      const otherAlive = alive(defenderBoard).filter((u) => !attacked.has(u.instanceId));
-      if (otherAlive.length > 0) {
-        activeSide = playerSide ? "enemy" : "player";
-        continue;
-      }
-      // Start a new cycle.
-      attacked.clear();
-      activeSide = initialSide;
-      continue;
-    }
-
-    const attacker = rng.pick(unattacked);
-    const target = findTarget(defenderBoard, rng);
-    executeStrike(attacker, target, attackerBoard, defenderBoard, defenderName, flags, resurrections, events, log);
-    attacked.add(attacker.instanceId);
+    const target = findTarget(defenderBoard);
+    executeStrike(entry.unit, target, attackerBoard, defenderBoard, defenderName, flags, resurrections, events, log, rotation);
     rounds++;
-    activeSide = playerSide ? "enemy" : "player";
   }
 
   const pAlive = alive(player);
