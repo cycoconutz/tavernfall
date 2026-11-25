@@ -1,35 +1,50 @@
 import { UNIT_TEMPLATES, toUnitState } from "../src/game/units";
 import { combat } from "../src/sim/combat";
 
-// Positional combat is deterministic and the player side always strikes first,
-// so mirror matches are decided purely by turn order. A meaningful balance
-// signal needs asymmetric matchups: every tribe against every other tribe.
-const TRIBES = ["goblins", "dragons", "naga", "murlocs"] as const;
+// Positional combat makes board ORDER part of comp strength, so the report
+// fights curated showcase comps (front to back) rather than file-order slices.
+// Each pair fights in BOTH directions so the player-side first-strike bias
+// cancels out of the totals. Draws score half for each side.
+const SHOWCASE: Record<string, string[]> = {
+  goblins: ["goblin_flagbearer", "goblin_king", "goblin_juggernaut"],
+  dragons: ["dragonspeaker", "dragonfire", "dragon_queen"],
+  naga: ["naga_hydra", "naga_tideshield", "leviathan"],
+  murlocs: ["murloc_tide_priest", "murloc_venomfin", "old_one"]
+};
 
-const rows: string[] = ["defender \\ attacker,goblins,dragons,naga,murlocs"];
-const totals = new Map<string, { wins: number; fights: number }>();
-for (const t of TRIBES) totals.set(t, { wins: 0, fights: 0 });
+const TRIBES = Object.keys(SHOWCASE);
 
-for (const attacker of TRIBES) {
-  const line: string[] = [attacker];
-  for (const defender of TRIBES) {
-    if (attacker === defender) {
+function comp(tribe: string) {
+  return SHOWCASE[tribe]
+    .map((id) => UNIT_TEMPLATES.find((u) => u.id === id))
+    .filter((u): u is NonNullable<typeof u> => !!u)
+    .map((u, idx) => toUnitState(u, `p${idx}`));
+}
+
+function mark(r: { winner: string }, attacker: string): "W" | "D" | "L" {
+  if (r.winner === "draw") return "D";
+  return r.winner === attacker ? "W" : "L";
+}
+
+type Cell = { w: number; d: number; l: number };
+const tally = new Map<string, Cell>();
+for (const t of TRIBES) tally.set(t, { w: 0, d: 0, l: 0 });
+
+const rows: string[] = ["attacker \\ defender," + TRIBES.join(",")];
+for (const atk of TRIBES) {
+  const line: string[] = [atk];
+  for (const def of TRIBES) {
+    if (atk === def) {
       line.push("-");
       continue;
     }
-    const atkUnits = UNIT_TEMPLATES.filter((u) => u.tribe === attacker).slice(0, 3);
-    const defUnits = UNIT_TEMPLATES.filter((u) => u.tribe === defender).slice(0, 3);
-    const player = atkUnits.map((u, idx) => toUnitState(u, `p${idx}`));
-    const enemy = defUnits.map((u, idx) => toUnitState(u, `e${idx}`));
-    const r = combat({ player, enemy, seed: 1 });
-    const won = r.winner === "player" || r.winner === "draw";
-    line.push(won ? "W" : "L");
-    const cellA = totals.get(attacker)!;
-    cellA.fights++;
-    if (won) cellA.wins++;
-    const cellD = totals.get(defender)!;
-    cellD.fights++;
-    if (!won) cellD.wins++;
+    const r = combat({ player: comp(atk), enemy: comp(def), seed: 1 });
+    line.push(mark(r, "player"));
+    const ca = tally.get(atk)!;
+    const cd = tally.get(def)!;
+    if (mark(r, "player") === "W") { ca.w++; cd.l++; }
+    else if (mark(r, "player") === "D") { ca.d++; cd.d++; }
+    else { ca.l++; cd.w++; }
   }
   rows.push(line.join(","));
 }
@@ -37,8 +52,12 @@ for (const attacker of TRIBES) {
 console.log(rows.join("\n"));
 console.log("");
 for (const t of TRIBES) {
-  const v = totals.get(t)!;
-  console.log(`${t}: ${(v.wins / v.fights).toFixed(2)} win rate across ${v.fights} matchups`);
+  const v = tally.get(t)!;
+  const fights = v.w + v.d + v.l;
+  const score = (v.w + 0.5 * v.d) / fights;
+  console.log(
+    `${t}: score ${score.toFixed(2)}  (${v.w}W ${v.d}D ${v.l}L over ${fights} fights)`
+  );
 }
 console.log("");
-console.log("note: attacker is the player side and always strikes first; mirror matches are excluded.");
+console.log("gates: every tribe score >= 0.25, no tribe score > 0.85, murlocs >= 1 win");

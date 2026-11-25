@@ -20,6 +20,8 @@ test("can buy and fight", async ({ page }) => {
 
 test("drag and drop reorders the board", async ({ page }) => {
   await page.goto("/");
+  // Fixed seed so the two bought units are always distinct templates.
+  await page.getByLabel(/Seed code/).fill("3");
   await page.getByRole("button", { name: "Start run" }).first().click();
   await page.getByRole("button", { name: /Buy/ }).first().click();
   await page.getByRole("button", { name: /Buy/ }).first().click();

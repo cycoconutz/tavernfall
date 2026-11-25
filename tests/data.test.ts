@@ -6,9 +6,9 @@ import relics from "../data/relics.json";
 const TRIBES = ["goblins", "dragons", "naga", "murlocs"];
 
 describe("game data", () => {
-  it("has 30 balanced units", () => {
-    expect(units).toHaveLength(30);
-    expect(new Set(units.map((u: any) => u.id)).size).toBe(30);
+  it("has 42 balanced units", () => {
+    expect(units).toHaveLength(42);
+    expect(new Set(units.map((u: any) => u.id)).size).toBe(42);
     for (const u of units as any[]) {
       expect(TRIBES).toContain(u.tribe);
       expect(u.tier).toBeGreaterThanOrEqual(1);
@@ -16,6 +16,20 @@ describe("game data", () => {
       expect(u.attack).toBeGreaterThan(0);
       expect(u.health).toBeGreaterThan(0);
       expect(Array.isArray(u.keywords)).toBe(true);
+      if (u.startEffect) {
+        expect(u.startEffect.type).toBe("buff_behind");
+        expect(u.startEffect.attack).toBeGreaterThan(0);
+        expect(u.startEffect.health).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("allows at most one buff_behind bearer per tribe", () => {
+    for (const tribe of TRIBES) {
+      const bearers = (units as any[]).filter(
+        (u) => u.tribe === tribe && u.startEffect && u.startEffect.type === "buff_behind"
+      );
+      expect(bearers.length).toBeLessThanOrEqual(1);
     }
   });
 
