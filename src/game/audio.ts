@@ -50,7 +50,7 @@ function tone(
   slideTo?: number
 ): void {
   if (!ctx || muted) return;
-  if (ctx.state === "suspended") void ctx.resume();
+  if (ctx.state === "suspended") ctx.resume().catch(() => undefined);
   const t = ctx.currentTime;
   const osc = ctx.createOscillator();
   const amp = ctx.createGain();
@@ -66,7 +66,7 @@ function tone(
 
 function noise(duration: number, gain = 0.05, filterFreq = 1200): void {
   if (!ctx || muted) return;
-  if (ctx.state === "suspended") void ctx.resume();
+  if (ctx.state === "suspended") ctx.resume().catch(() => undefined);
   const t = ctx.currentTime;
   const frames = Math.floor(ctx.sampleRate * duration);
   const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);

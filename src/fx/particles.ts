@@ -112,10 +112,12 @@ export class FxEngine {
       ctx.translate(p.x, p.y);
       ctx.rotate(p.angle);
       const tex = this.textures.get(p.kind);
-      if (p.sprite) {
+      const drawable = (img: HTMLImageElement | undefined): img is HTMLImageElement =>
+        !!img && img.complete && img.naturalWidth > 0;
+      if (drawable(p.sprite)) {
         const s = p.size * (1 + t * 0.6);
         ctx.drawImage(p.sprite, -s / 2, -s / 2, s, s);
-      } else if (tex) {
+      } else if (drawable(tex)) {
         const s = p.size * (p.kind === "puff" ? 1 + t * 1.6 : 1);
         ctx.drawImage(tex, -s / 2, -s / 2, s, s);
       } else {
