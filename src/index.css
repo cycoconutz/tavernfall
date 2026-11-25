@@ -61,6 +61,29 @@ button, input { min-height: 40px; }
   z-index: 5;
 }
 
+/* --- Fight playback overlay --- */
+.playback-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 14, 0.86);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  z-index: 50;
+}
+.pb-stage { position: relative; display: flex; flex-direction: column; gap: 22px; }
+.pb-board { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.pb-tile { position: relative; min-width: 92px; }
+.pb-tile img { width: 56px; height: 56px; }
+.pb-tile .float-num {
+  left: 50%;
+  top: 4px;
+  translate: -50% 0;
+  color: #ffd98a;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .unit, .float-num { animation: none !important; }
 }

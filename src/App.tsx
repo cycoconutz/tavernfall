@@ -7,6 +7,11 @@ import { currentEncounter } from "./game/run";
 import { saveRun, loadRun, clearRun, encodeSeed, decodeSeed } from "./game/persist";
 import { relicLabel } from "./game/relics";
 import { heroPower, heroList } from "./game/heroes";
+import { combat, cloneBoard } from "./sim/combat";
+import { boardForCombat, combatFlagsForRelics } from "./game/modifiers";
+import { Rng } from "./sim/rng";
+import type { CombatEvent, UnitState } from "./sim/types";
+import { Playback } from "./ui/Playback";
 import { FxCanvas } from "./fx/FxCanvas";
 import type { FxCanvasHandle } from "./fx/FxCanvas";
 import { isMuted, sfx, toggleMute, warmUp } from "./game/audio";
@@ -26,6 +31,12 @@ export default function App() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [popUnit, setPopUnit] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(!isMuted());
+  const [playback, setPlayback] = useState<{
+    log: CombatEvent[];
+    player: UnitState[];
+    enemy: UnitState[];
+    won: boolean;
+  } | null>(null);
   const appRef = useRef<HTMLDivElement>(null);
   const fxRef = useRef<FxCanvasHandle>(null);
 
@@ -80,6 +91,34 @@ export default function App() {
       warmUp();
       sfx.tick();
     }
+  }
+
+  function fight() {
+    if (!state) return;
+    warmUp();
+    const encNow = currentEncounter(state);
+    if (!encNow || encNow.kind === "rest") {
+      dispatch({ type: "FIGHT" });
+      return;
+    }
+    // The reducer resolves the fight itself; this pure recomputation with the
+    // same inputs yields the identical log for the playback overlay.
+    const playerCombat = boardForCombat(state);
+    const enemyCombat = cloneBoard(encNow.enemy);
+    const rng = new Rng(state.seed + state.encounterIndex * 101);
+    const result = combat({
+      player: playerCombat,
+      enemy: enemyCombat,
+      seed: Math.floor(rng.next() * 1e9),
+      ...combatFlagsForRelics(state.relicIds)
+    });
+    setPlayback({
+      log: result.log,
+      player: playerCombat,
+      enemy: enemyCombat,
+      won: result.winner === "player" || result.winner === "draw"
+    });
+    dispatch({ type: "FIGHT" });
   }
 
   useEffect(() => {
@@ -238,7 +277,7 @@ export default function App() {
               <button onClick={() => dispatch({ type: "REROLL" })}>Reroll (-1)</button>
               <button onClick={() => dispatch({ type: "UPGRADE" })}>Upgrade tier</button>
               <button onClick={() => dispatch({ type: "FREEZE" })}>{state.frozen ? "Unfreeze" : "Freeze"}</button>
-              <button className="primary" onClick={() => dispatch({ type: "FIGHT" })}>
+              <button className="primary" onClick={fight}>
                 Fight
               </button>
               <button onClick={() => dispatch({ type: "ADVANCE" })} disabled={!!state.pendingRelics}>Advance</button>
@@ -282,6 +321,16 @@ export default function App() {
             Final HP {state.health}, gold {state.gold}, W{state.stats.wins}/L{state.stats.losses}.
           </p>
         </div>
+      )}
+
+      {playback && (
+        <Playback
+          log={playback.log}
+          player={playback.player}
+          enemy={playback.enemy}
+          won={playback.won}
+          onDone={() => setPlayback(null)}
+        />
       )}
 
       <FxCanvas ref={fxRef} />

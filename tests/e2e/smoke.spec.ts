@@ -51,3 +51,14 @@ test("sound toggle flips and persists across reload", async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("button", { name: /Sound: off/ })).toBeVisible();
 });
+
+test("fight plays back as an overlay and can be skipped", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start run" }).first().click();
+  await page.getByRole("button", { name: /Buy/ }).first().click();
+  await page.getByRole("button", { name: "Fight" }).click();
+  await expect(page.locator(".playback-overlay")).toBeVisible();
+  await page.getByRole("button", { name: "Skip" }).click();
+  await expect(page.locator(".playback-overlay")).toHaveCount(0);
+  await expect(page.getByText(/Last fight/)).toBeVisible();
+});
