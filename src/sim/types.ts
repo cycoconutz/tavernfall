@@ -12,6 +12,10 @@ export interface UnitTemplate {
   keywords: Keyword[];
   // optional shorthand effects resolved by sim
   deathrattle?: "summon" | "damage_adjacent" | "buff_ally";
+  // start-of-fight positional effect, resolved on the combat copy by
+  // boardForCombat: buff_behind gives every ally in a later slot
+  // +attack/+health (multiple bearers stack, applied in slot order).
+  startEffect?: { type: "buff_behind"; attack: number; health: number };
 }
 
 export interface UnitState {

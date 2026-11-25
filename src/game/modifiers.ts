@@ -19,6 +19,20 @@ export function boardForCombat(state: GameState): UnitState[] {
     if (relics.has("murloc_call") && tribe === "murlocs") addKeyword(u, "reborn");
   }
 
+  // Start-of-fight positional effects, applied after the relic pass so the
+  // buffs land on the same combat copies. For each unit whose template has a
+  // startEffect, every ally in a later slot gains its attack/health. Slot
+  // order, so a bearer benefits from bearers earlier in the row, never from
+  // itself, and multiple bearers stack. No-op for boards without them.
+  for (let i = 0; i < board.length; i++) {
+    const effect = findTemplate(board[i].templateId)?.startEffect;
+    if (!effect || effect.type !== "buff_behind") continue;
+    for (let j = i + 1; j < board.length; j++) {
+      board[j].attack += effect.attack;
+      board[j].health += effect.health;
+    }
+  }
+
   return board;
 }
 
