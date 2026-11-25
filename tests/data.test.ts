@@ -30,8 +30,26 @@ describe("game data", () => {
     expect((heroes as any[]).map((h: any) => h.id).sort()).toEqual(["mage", "ranger", "warrior"]);
   });
 
-  it("has ten relic templates", () => {
-    expect(relics).toHaveLength(10);
-    expect(new Set((relics as any[]).map((r: any) => r.id)).size).toBe(10);
+  it("has thirteen relic templates", () => {
+    expect(relics).toHaveLength(13);
+    expect(new Set((relics as any[]).map((r: any) => r.id)).size).toBe(13);
+    for (const r of relics as any[]) {
+      expect(typeof r.name).toBe("string");
+      expect(r.effect.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("defines every hook-driven relic", () => {
+    const ids = (relics as any[]).map((r: any) => r.id);
+    for (const id of [
+      "golden_anvil", // upgrade cost hook
+      "crystal_lens", // shop width hook
+      "triple_crown", // on-triple hook
+      "deep_forge",
+      "grand_bazaar",
+      "barkeeps_tip"
+    ]) {
+      expect(ids).toContain(id);
+    }
   });
 });

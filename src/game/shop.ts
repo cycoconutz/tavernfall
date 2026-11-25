@@ -2,6 +2,7 @@ import { Rng } from "../sim/rng";
 import { randomTemplate, toUnitState, findTemplate } from "./units";
 import type { GameState } from "./state";
 import type { UnitState } from "../sim/types";
+import { onTriple, relicShopWidth, relicUpgradeCost } from "./relics";
 
 const TIER_COST: Record<number, number> = { 2: 5, 3: 7, 4: 8, 5: 9, 6: 10 };
 const BUY_COST = 3;
@@ -17,7 +18,7 @@ function nextId(state: GameState): string {
 
 export function generateShop(state: GameState, rng: Rng): void {
   if (state.frozen) return;
-  const size = state.relicIds.includes("crystal_lens") ? 5 : 4;
+  const size = relicShopWidth(state, SHOP_SIZE);
   const out: UnitState[] = [];
   const maxTier = state.tier;
   for (let i = 0; i < size; i++) {
@@ -75,6 +76,7 @@ function tripleUpgrade(state: GameState, templateId: string): void {
     });
     const t = findTemplate(templateId)!;
     state.board.push(toUnitState(t, `g${state.instanceCounter++}`, true));
+    onTriple(state, t);
   }
 }
 
@@ -95,8 +97,7 @@ export function reroll(state: GameState, rng: Rng): boolean {
 
 export function upgradeTier(state: GameState): boolean {
   if (state.tier >= 6) return false;
-  let cost = TIER_COST[state.tier + 1];
-  if (state.relicIds.includes("golden_anvil")) cost = Math.max(1, cost - 1);
+  const cost = relicUpgradeCost(state, TIER_COST[state.tier + 1]);
   if (state.gold < cost) return false;
   state.gold -= cost;
   state.tier++;
