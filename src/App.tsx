@@ -19,6 +19,7 @@ function reducer(state: GameState | null, action: Action): GameState | null {
 export default function App() {
   const [state, dispatch] = useReducer(reducer, null, init);
   const [seedCode, setSeedCode] = useState<string | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (state) saveRun(state);
@@ -128,7 +129,28 @@ export default function App() {
         <strong>Your board ({state.board.length}/7)</strong>
         <div className="row">
           {state.board.map((u, i) => (
-            <div key={u.instanceId} className="unit">
+            <div
+              key={u.instanceId}
+              className={`unit${dragIndex === i ? " dragging" : ""}${
+                dragIndex !== null && dragIndex !== i ? " drop-target" : ""
+              }`}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", String(i));
+                setDragIndex(i);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const from = dragIndex ?? Number(e.dataTransfer.getData("text/plain"));
+                if (!Number.isNaN(from) && from !== i) {
+                  dispatch({ type: "MOVE_BOARD", from, to: i });
+                }
+                setDragIndex(null);
+              }}
+            >
               <img src={`${import.meta.env.BASE_URL}assets/${u.templateId}.png`} alt={u.templateId} onError={(e) => (e.currentTarget.style.display = "none")} />
               <div>{u.templateId}</div>
               <div className="muted">
