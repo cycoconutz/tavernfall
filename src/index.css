@@ -22,8 +22,18 @@ button, input { min-height: 40px; }
 .unit[draggable]:active { cursor: grabbing; }
 
 @media (max-width: 720px) {
+  .app { padding: 10px; }
   .grid { grid-template-columns: 1fr 1fr; }
   .card { padding: 10px; }
   .row { gap: 6px; }
-  .unit { min-width: 68px; }
+  .unit { min-width: 64px; padding: 6px; }
+  .unit img { width: 48px; height: 48px; }
+  button { padding: 8px 10px; min-height: 44px; }
+}
+
+@media (max-width: 480px) {
+  .grid { grid-template-columns: 1fr; }
+  .unit { min-width: 56px; }
+  .unit img { width: 40px; height: 40px; }
+  .log { max-height: 120px; }
 }
